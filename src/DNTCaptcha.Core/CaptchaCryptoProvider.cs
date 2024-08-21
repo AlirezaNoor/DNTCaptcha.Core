@@ -50,7 +50,7 @@ public class CaptchaCryptoProvider : ICaptchaCryptoProvider
         }
 
         var inputBytes = WebEncoders.Base64UrlDecode(inputText);
-        var bytes = decrypt(inputBytes);
+        var bytes = Decrypt(inputBytes);
 
         return Encoding.UTF8.GetString(bytes);
     }
@@ -66,7 +66,7 @@ public class CaptchaCryptoProvider : ICaptchaCryptoProvider
         }
 
         var inputBytes = Encoding.UTF8.GetBytes(inputText);
-        var bytes = encrypt(inputBytes);
+        var bytes = Encrypt(inputBytes);
 
         return WebEncoders.Base64UrlEncode(bytes);
     }
@@ -77,15 +77,14 @@ public class CaptchaCryptoProvider : ICaptchaCryptoProvider
          Justification = "That's enough for our usecase!"),
      SuppressMessage("Microsoft.Usage", "SCS0011:encrypt uses a weak cryptographic algorithm TripleDES",
          Justification = "That's enough for our usecase!")]
-    private byte[] encrypt(byte[] data)
+    private byte[] Encrypt(byte[] data)
     {
-        using (var des = new TripleDESCryptoServiceProvider
-               {
-                   Key = _keyBytes,
-                   Mode = CipherMode.CBC,
-                   Padding = PaddingMode.PKCS7
-               })
+        using (var des = TripleDES.Create())
         {
+            des.Key = _keyBytes;
+            des.Mode = CipherMode.CBC;
+            des.Padding = PaddingMode.PKCS7;
+
             using var encryptor = des.CreateEncryptor();
             using var cipherStream = new MemoryStream();
 
@@ -94,7 +93,7 @@ public class CaptchaCryptoProvider : ICaptchaCryptoProvider
                 using (var binaryWriter = new BinaryWriter(cryptoStream))
                 {
                     // prepend IV to data
-                    cipherStream.Write(des.IV); // This is an auto-generated random key
+                    cipherStream.Write(des.IV, 0, des.IV.Length); // Ensure the IV is fully written
                     binaryWriter.Write(data);
                     cryptoStream.FlushFinalBlock();
                 }
@@ -104,21 +103,21 @@ public class CaptchaCryptoProvider : ICaptchaCryptoProvider
         }
     }
 
+
     [SuppressMessage("Microsoft.Usage", "S5547:encrypt uses a weak cryptographic algorithm TripleDES",
          Justification = "That's enough for our usecase!"),
      SuppressMessage("Microsoft.Usage", "CA5350:encrypt uses a weak cryptographic algorithm TripleDES",
          Justification = "That's enough for our usecase!"),
      SuppressMessage("Microsoft.Usage", "SCS0011:encrypt uses a weak cryptographic algorithm TripleDES",
          Justification = "That's enough for our usecase!")]
-    private byte[] decrypt(byte[] data)
+    private byte[] Decrypt(byte[] data)
     {
-        using (var des = new TripleDESCryptoServiceProvider
-               {
-                   Key = _keyBytes,
-                   Mode = CipherMode.CBC,
-                   Padding = PaddingMode.PKCS7
-               })
+        using (var des = TripleDES.Create())
         {
+            des.Key = _keyBytes;
+            des.Mode = CipherMode.CBC;
+            des.Padding = PaddingMode.PKCS7;
+
             var iv = new byte[8]; // 3DES-IV is always 8 bytes/64 bits because block size is always 64 bits
             Array.Copy(data, 0, iv, 0, iv.Length);
 
@@ -128,7 +127,7 @@ public class CaptchaCryptoProvider : ICaptchaCryptoProvider
             {
                 using (var binaryWriter = new BinaryWriter(decryptor))
                 {
-                    // decrypt cipher text from data, starting just past the IV
+                    // Decrypt cipher text from data, starting just past the IV
                     binaryWriter.Write(data, iv.Length, data.Length - iv.Length);
                 }
             }
@@ -136,6 +135,7 @@ public class CaptchaCryptoProvider : ICaptchaCryptoProvider
             return ms.ToArray();
         }
     }
+
 
     private byte[] getDesKey(string? key)
     {
